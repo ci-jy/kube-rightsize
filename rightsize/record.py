@@ -39,6 +39,7 @@ def _queries(namespace, rate_window):
         ),
         "oom_events": f"max {by} (container_oom_events_total{{{sel}}})",
         "requests": f"max by (namespace, pod, container, resource) (kube_pod_container_resource_requests{{{sel}}})",
+        "info": f"max {by} (kube_pod_container_info{{{sel}}})",
         "limits": f"max by (namespace, pod, container, resource) (kube_pod_container_resource_limits{{{sel}}})",
     }
 
@@ -77,9 +78,16 @@ def record(prom, namespace, duration_s, step_s=15, end=None, rate_window="1m"):
             else:
                 pod[name] = pts
 
+    # cAdvisor also reports init containers; kube_pod_container_info only lists
+    # regular ones, which are the only ones whose requests matter here.
+    regular = {k for k, e in containers.items() if any("info" in p for p in e["pods"].values())}
+    if regular:
+        containers = {k: e for k, e in containers.items() if k in regular}
     out = []
     for key in sorted(containers):
         entry = containers[key]
+        for p in entry["pods"].values():
+            p.pop("info", None)
         entry["pods"] = [entry["pods"][p] for p in sorted(entry["pods"])]
         out.append(entry)
     return {

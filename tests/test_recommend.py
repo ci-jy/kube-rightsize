@@ -47,7 +47,7 @@ def test_oom_killed_container_is_censored_not_shrunk():
     assert "memory-censored" in r["flags"]
     assert r["observed"]["oom_kills"] == 2
     assert r["confidence"] == "low"
-    assert req(r, "memory") >= 64 * MI * 1.25
+    assert req(r, "memory") >= 164 * MI  # old limit + 100Mi beats +20 %
     assert parse_memory(r["recommended"]["limits"]["memory"]) > 64 * MI
     assert "restarted" not in r["flags"]  # restarts explained by OOM
 
@@ -64,7 +64,7 @@ def test_throttled_cpu_is_censored():
             throttled=flat(0.6))
     r = recommend_container(container(p))
     assert "cpu-censored" in r["flags"]
-    assert req(r, "cpu") >= 0.25
+    assert req(r, "cpu") >= 0.2 * 1.2
 
 
 def test_non_oom_restart_drops_warmup_cpu_and_lowers_confidence():
@@ -99,6 +99,27 @@ def test_replaced_pod_counts_as_one_replica():
     new = pod("svc-abc12345-bbbbb", flat(0.02, 60), flat(90 * MI, 60), start=60 * 15.0)
     r = recommend_container(container(old, new))
     assert r["replicas"] == 1
+    # A rolling update briefly runs both pods; that is still one replica.
+    overlap = pod("svc-abc12345-ccccc", flat(0.02, 70), flat(90 * MI, 70))
+    assert recommend_container(container(overlap, new))["replicas"] == 1
+
+
+def test_current_settings_come_from_the_newest_pod():
+    # The deployment was re-specced mid-recording: old pod 256Mi, new pod 64Mi.
+    old = pod("svc-abc12345-aaaaa", flat(0.02, 60), flat(40 * MI, 60),
+              requests={"cpu": 0.1, "memory": 256 * MI}, limits={"memory": 512 * MI})
+    new = pod("svc-def67890-bbbbb", flat(0.02, 60), flat(40 * MI, 60), start=60 * 15.0,
+              requests={"cpu": 0.1, "memory": 64 * MI}, limits={"memory": 128 * MI})
+    r = recommend_container(container(old, new))
+    assert r["current"]["requests"]["memory"] == "64Mi"
+    assert r["current"]["limits"]["memory"] == "128Mi"
+
+
+def test_startup_throttling_is_not_mistaken_for_a_cpu_cap():
+    throttled = [0.9] * 4 + [0.0] * (N - 4)  # throttled only while booting
+    p = pod("p", flat(0.01), flat(50 * MI), limits={"cpu": 0.2, "memory": 256 * MI}, throttled=throttled)
+    r = recommend_container(container(p))
+    assert "cpu-censored" not in r["flags"]
 
 
 def test_short_history_never_lowers_requests():
@@ -165,7 +186,8 @@ def test_oom_killed_never_recommended_below_its_old_limit(mem, limit, kills):
     r = recommend_container(container(p))
     assert "memory-censored" in r["flags"]
     assert r["confidence"] == "low"
-    assert req(r, "memory") >= limit * Policy().censored_bump - 1
+    pol = Policy()
+    assert req(r, "memory") >= max(limit * pol.censored_bump, limit + pol.censored_min_bump) - 1
 
 
 @settings(max_examples=100, deadline=None)

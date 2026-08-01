@@ -43,6 +43,11 @@ def test_record_groups_replicas_under_one_container():
         "container_cpu_usage_seconds_total{": [
             {"metric": m("web-abc12345-aaaaa", "server"), "values": [[0, "0.1"], [15, "0.2"]]},
             {"metric": m("web-abc12345-bbbbb", "server"), "values": [[0, "0.3"], [15, "NaN"]]},
+            # an init container: cAdvisor has it, kube_pod_container_info does not
+            {"metric": m("web-abc12345-aaaaa", "wait-for-db"), "values": [[0, "0.5"]]},
+        ],
+        "kube_pod_container_info": [
+            {"metric": m("web-abc12345-aaaaa", "server"), "values": [[0, "1"]]},
         ],
         "container_memory_working_set_bytes": [
             {"metric": m("web-abc12345-aaaaa", "server"), "values": [[0, "1000"], [15, "2000"]]},
@@ -55,11 +60,12 @@ def test_record_groups_replicas_under_one_container():
     })
     rec = record(prom, "shop", 1800, end=10_000)
     assert rec["start"] == 8200 and rec["end"] == 10_000
-    assert [c["workload"] for c in rec["containers"]] == ["web"]
+    assert [(c["workload"], c["container"]) for c in rec["containers"]] == [("web", "server")]
     pods = rec["containers"][0]["pods"]
     assert [p["pod"] for p in pods] == ["web-abc12345-aaaaa", "web-abc12345-bbbbb"]
     assert pods[0]["requests"] == {"cpu": 0.1, "memory": 64.0}
     assert pods[1]["cpu"] == [[0.0, 0.3]]  # NaN dropped
+    assert "info" not in pods[0]
     assert all('namespace="shop"' in q for q in prom.queries)
 
 

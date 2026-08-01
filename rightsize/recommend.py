@@ -11,9 +11,12 @@ Usage that hit a ceiling is *censored*: a container that was OOM-killed, or
 whose working set sat at its memory limit, never showed its true peak, so its
 percentile is a lower bound and must not be used to shrink it. The same goes
 for CPU that was being throttled at its limit. Censored series are flagged and
-the recommendation is raised to at least ``censored_bump`` x the old limit.
+the recommendation is raised the way the Vertical Pod Autoscaler reacts to an
+OOM kill: to the larger of ``censored_bump`` x the old limit and the old limit
+plus ``censored_min_bump`` (20 % / 100Mi by default).
 """
 
+import math
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 
@@ -32,7 +35,8 @@ class Policy:
     memory_step: float = 4 * MI
     memory_limit_ratio: float = 1.25
     cpu_limit_ratio: float = 0.0  # 0 = recommend no CPU limit
-    censored_bump: float = 1.25
+    censored_bump: float = 1.2
+    censored_min_bump: float = 100 * MI  # bytes, memory only
     memory_capped_ratio: float = 0.95  # working set >= 95 % of limit counts as capped
     cpu_capped_ratio: float = 0.90
     throttle_threshold: float = 0.20  # P95 share of throttled CFS periods
@@ -74,12 +78,14 @@ def analyse_pod(pod, policy, step):
         starts.append(cpu[0][0])  # a pod that appears mid-recording also just started
     # A rate() window straddling a restart is meaningless; startup CPU bursts are
     # absorbed by the absent CPU limit, so they should not drive the request either.
-    cpu_vals = [v for t, v in cpu if not any(0 <= t - s < policy.warmup_seconds for s in starts)]
-    if not cpu_vals and cpu:
-        cpu_vals = [v for _, v in cpu]
+    def settled(points):
+        kept = [v for t, v in points if not any(0 <= t - s < policy.warmup_seconds for s in starts)]
+        return kept or [v for _, v in points]
+
+    cpu_vals = settled(cpu)
 
     mem_vals = [v for _, v in pod.get("memory", [])]
-    throttled = [v for _, v in pod.get("throttled", [])]
+    throttled = settled(pod.get("throttled", []))
     times = [t for t, _ in pod.get("memory", [])] + [t for t, _ in cpu]
     return {
         "pod": pod["pod"],
@@ -96,17 +102,24 @@ def analyse_pod(pod, policy, step):
     }
 
 
-def _max_concurrent(pods):
+def _typical_replicas(pods):
+    """Median number of pods alive at once, so a rollout's brief overlap is not counted as scale."""
     counts = defaultdict(int)
     for p in pods:
         for t in p["timestamps"]:
             counts[t] += 1
-    return max(counts.values()) if counts else len(pods)
+    if not counts:
+        return len(pods)
+    return int(math.ceil(percentile(list(counts.values()), 50)))
 
 
 def _current(pods, kind, resource):
-    vals = [p[kind][resource] for p in pods if resource in p[kind]]
-    return max(vals) if vals else None
+    """Setting on the most recently seen pod; replaced pods may carry an older spec."""
+    seen = [p for p in pods if resource in p[kind]]
+    if not seen:
+        return None
+    newest = max(seen, key=lambda p: (p["last"] or 0, p["first"] or 0))
+    return newest[kind][resource]
 
 
 def _spread(pods, key, q, policy):
@@ -127,7 +140,7 @@ def recommend_container(entry, policy=None, step=15.0):
         "namespace": entry.get("namespace"),
         "workload": entry["workload"],
         "container": entry["container"],
-        "replicas": _max_concurrent(pods) if pods else 0,
+        "replicas": _typical_replicas(pods) if pods else 0,
         "current": _quantities(cur),
         "flags": [],
         "reasons": [],
@@ -162,14 +175,16 @@ def recommend_container(entry, policy=None, step=15.0):
     mem_capped = bool(mem_limit_now) and mem_max >= policy.memory_capped_ratio * mem_limit_now
     if oom_kills or mem_capped:
         flags.append("memory-censored")
-        floor = (mem_limit_now or mem_max) * policy.censored_bump
+        base = mem_limit_now or mem_max
+        floor = max(base * policy.censored_bump, base + policy.censored_min_bump)
         why = (
             f"OOM-killed {oom_kills} time(s)" if oom_kills
             else f"working set peaked at {mem_max / MI:.1f}Mi, at its {mem_limit_now / MI:.0f}Mi limit"
         )
         reasons.append(
             f"Memory is censored: {why}, so the real peak is unknown. "
-            f"Raised to at least {policy.censored_bump:g}x the limit ({floor / MI:.0f}Mi) instead of trusting the percentile."
+            f"Raised to {floor / MI:.0f}Mi (old limit +{policy.censored_bump - 1:.0%} or "
+            f"+{policy.censored_min_bump / MI:.0f}Mi, whichever is larger) instead of trusting the percentile."
         )
         mem_req = max(mem_req, floor)
 
@@ -239,7 +254,7 @@ def recommend_container(entry, policy=None, step=15.0):
     mem_req = round_up(mem_req, policy.memory_step)
     mem_lim = max(mem_req * policy.memory_limit_ratio, mem_max * (1 + policy.memory_headroom))
     if "memory-censored" in flags and mem_limit_now:
-        mem_lim = max(mem_lim, mem_limit_now * policy.censored_bump * policy.memory_limit_ratio)
+        mem_lim = max(mem_lim, mem_req * policy.memory_limit_ratio)
     mem_lim = round_up(mem_lim, policy.memory_step)
     cpu_lim = round_up(cpu_req * policy.cpu_limit_ratio, policy.cpu_step) if policy.cpu_limit_ratio else None
 

@@ -20,7 +20,7 @@ class Prometheus:
         Each element is ``{"metric": {...}, "values": [[ts, "value"], ...]}``.
         """
         params = urllib.parse.urlencode(
-            {"query": query, "start": f"{start:.3f}", "end": f"{end:.3f}", "step": f"{step}s"}
+            {"query": query, "start": f"{start:.3f}", "end": f"{end:.3f}", "step": f"{float(step):g}"}
         )
         req = urllib.request.Request(
             f"{self.base_url}/api/v1/query_range",
