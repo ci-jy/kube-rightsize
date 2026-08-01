@@ -1,0 +1,23 @@
+# Just enough Prometheus for container usage: the server (which scrapes
+# kubelet/cAdvisor through its default kubernetes-nodes-cadvisor job) and
+# kube-state-metrics for requests, limits, restarts and termination reasons.
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+server:
+  global:
+    scrape_interval: 15s
+    evaluation_interval: 1m
+  retention: 6h
+  persistentVolume:
+    enabled: false
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+kube-state-metrics:
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {memory: 128Mi}

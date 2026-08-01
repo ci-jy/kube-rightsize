@@ -1,0 +1,14 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+# Sandboxed hosts (nested containers, some VMs) hide /dev/kmsg and make
+# /proc/sys read-only. The kubelet only needs those for its kernel OOM watcher
+# and for tuning a few sysctls; this gate lets it carry on without them. OOM
+# kills are still reported through container status. On a normal Linux host
+# both settings are harmless.
+featureGates:
+  KubeletInUserNamespace: true
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /dev/null
+        containerPath: /dev/kmsg
