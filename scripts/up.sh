@@ -51,10 +51,10 @@ kubectl --context "$ctx" -n boutique delete service frontend-external --ignore-n
 kubectl --context "$ctx" -n boutique set env deployment/loadgenerator USERS="$USERS"
 
 if [[ $SQUEEZE == 1 ]]; then
-  # recommendationservice idles around 60-70Mi; a 50Mi limit makes the kernel
+  # recommendationservice settles around 41Mi on kind; a 40Mi limit makes the kernel
   # OOM-kill it under load, which is exactly the censored case rightsize flags.
   kubectl --context "$ctx" -n boutique set resources deployment/recommendationservice \
-    --requests=memory=40Mi --limits=memory=50Mi
+    --requests=memory=32Mi --limits=memory=40Mi
 fi
 
 kubectl --context "$ctx" -n boutique wait --for=condition=available deployment --all --timeout=15m || {
