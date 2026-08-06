@@ -83,6 +83,11 @@ def test_boutique_is_over_requested_overall(result):
     assert s["censored"] >= 1
     assert s["memory_freed_percent"] > 0
     assert s["cpu_freed_percent"] > 0
+    # Pin the figures quoted in the README so a rule change cannot silently move them.
+    assert (s["cpu_requested_millicores"], s["cpu_recommended_millicores"]) == (1570, 140)
+    assert (s["memory_requested_mib"], s["memory_recommended_mib"]) == (1180.0, 692.0)
+    assert s["cpu_freed_percent"] == 91.1
+    assert s["memory_freed_percent"] == 41.4
 
 
 def test_pooling_identical_replicas_does_not_change_the_answer(recording):
