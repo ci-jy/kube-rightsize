@@ -1,4 +1,4 @@
-"""Command line: ``python -m rightsize record|recommend``."""
+"""Command line: ``python -m rightsize record|recommend|patch|validate``."""
 
 import argparse
 import json
@@ -6,6 +6,7 @@ import os
 import re
 import sys
 
+from .patch import build_patches, summary_line, write_patches
 from .prom import Prometheus, PrometheusError
 from .recommend import Policy, recommend
 from .record import record
@@ -93,6 +94,19 @@ def cmd_recommend(args):
     return 0
 
 
+def cmd_patch(args):
+    with open(args.recommendations) as fh:
+        recs = json.load(fh)
+    plans = build_patches(recs, cpu_limits=args.cpu_limits, min_confidence=args.min_confidence)
+    files, index = write_patches(plans, args.out, base=args.base, cpu_limits=args.cpu_limits)
+    _write_json(os.path.join(args.out, "patches.json"), index)
+    if not args.quiet:
+        with open(os.path.join(args.out, "diff.txt")) as fh:
+            print(fh.read())
+    print(f"{summary_line(plans)}; wrote {len(files)} patch file(s) to {args.out}", file=sys.stderr)
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="rightsize", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -119,6 +133,17 @@ def build_parser():
     c.add_argument("--memory-headroom", type=float, default=0.10)
     c.add_argument("-q", "--quiet", action="store_true", help="skip the summary table")
     c.set_defaults(func=cmd_recommend)
+
+    pt = sub.add_parser("patch", help="write Kustomize patches and a diff from recommendations")
+    pt.add_argument("--recommendations", default="out/recommendations.json", help="output of recommend")
+    pt.add_argument("--out", default="out/patches", help="directory for the patches (default out/patches)")
+    pt.add_argument("--base", help="kustomization directory to list under resources:")
+    pt.add_argument("--cpu-limits", choices=("keep", "drop"), default="keep",
+                    help="keep existing CPU limits (default) or remove them as recommended")
+    pt.add_argument("--min-confidence", choices=("none", "low", "medium", "high"), default="low",
+                    help="skip recommendations below this confidence (default low)")
+    pt.add_argument("-q", "--quiet", action="store_true", help="do not print the diff")
+    pt.set_defaults(func=cmd_patch)
     return p
 
 
