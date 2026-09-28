@@ -3,7 +3,7 @@ import json
 import pytest
 
 from rightsize.cli import main, parse_duration
-from rightsize.record import record, workload_of
+from rightsize.record import record, workload_and_kind, workload_of
 
 
 @pytest.mark.parametrize("pod,workload", [
@@ -15,6 +15,16 @@ from rightsize.record import record, workload_of
 ])
 def test_workload_of_strips_controller_suffixes(pod, workload):
     assert workload_of(pod) == workload
+
+
+@pytest.mark.parametrize("pod,kind", [
+    ("cartservice-7c9d8b6f5d-x2k9p", "Deployment"),
+    ("prometheus-server-0", "StatefulSet"),
+    ("kindnet-w2wzj", "DaemonSet"),
+    ("standalone", "Pod"),
+])
+def test_workload_kind_is_guessed_from_the_pod_name(pod, kind):
+    assert workload_and_kind(pod)[1] == kind
 
 
 class FakeProm:

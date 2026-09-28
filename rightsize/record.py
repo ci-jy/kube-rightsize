@@ -15,12 +15,20 @@ _STATEFUL_POD = re.compile(r"^(?P<w>.+)-\d+$")
 _DAEMONSET_POD = re.compile(r"^(?P<w>.+)-[a-z0-9]{5}$")
 
 
+_KINDS = ((_DEPLOYMENT_POD, "Deployment"), (_STATEFUL_POD, "StatefulSet"), (_DAEMONSET_POD, "DaemonSet"))
+
+
 def workload_of(pod):
-    for pattern in (_DEPLOYMENT_POD, _STATEFUL_POD, _DAEMONSET_POD):
+    return workload_and_kind(pod)[0]
+
+
+def workload_and_kind(pod):
+    """('cartservice-7c9d8b6f5d-x2k9p') -> ('cartservice', 'Deployment'); bare pods get kind 'Pod'."""
+    for pattern, kind in _KINDS:
         m = pattern.match(pod)
         if m:
-            return m.group("w")
-    return pod
+            return m.group("w"), kind
+    return pod, "Pod"
 
 
 def _queries(namespace, rate_window):

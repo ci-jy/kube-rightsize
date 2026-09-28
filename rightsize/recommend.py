@@ -20,6 +20,7 @@ import math
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 
+from .record import workload_and_kind
 from .stats import percentile
 from .units import MI, format_cpu, format_memory, millicores, round_up
 
@@ -122,6 +123,11 @@ def _current(pods, kind, resource):
     return newest[kind][resource]
 
 
+def _kind(entry):
+    kinds = {workload_and_kind(p["pod"])[1] for p in entry.get("pods", [])}
+    return kinds.pop() if len(kinds) == 1 else "Deployment"
+
+
 def _spread(pods, key, q, policy):
     per = [percentile(p[key], q) for p in pods if len(p[key]) >= policy.min_samples]
     if len(per) < 2 or min(per) <= 0:
@@ -139,6 +145,7 @@ def recommend_container(entry, policy=None, step=15.0):
     result = {
         "namespace": entry.get("namespace"),
         "workload": entry["workload"],
+        "kind": _kind(entry),
         "container": entry["container"],
         "replicas": _typical_replicas(pods) if pods else 0,
         "current": _quantities(cur),
