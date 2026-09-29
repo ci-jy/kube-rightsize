@@ -10,6 +10,7 @@ from .patch import build_patches, summary_line, write_patches
 from .prom import Prometheus, PrometheusError
 from .recommend import Policy, recommend
 from .record import record
+from .validate import Gates, Kubectl, KubectlError, validate
 
 _DURATION = re.compile(r"^(\d+(?:\.\d+)?)([smhd]?)$")
 _UNIT = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
@@ -107,6 +108,31 @@ def cmd_patch(args):
     return 0
 
 
+def cmd_validate(args):
+    with open(os.path.join(args.patches, "patches.json")) as fh:
+        index = json.load(fh)
+    if args.namespace:
+        index["workloads"] = [w for w in index["workloads"] if w["namespace"] in (None, args.namespace)]
+    namespace = args.namespace or next((w["namespace"] for w in index["workloads"] if w["namespace"]), "default")
+    gates = Gates(max_throttle=args.max_throttle, max_error_increase=args.max_error_increase,
+                  min_requests=args.min_requests)
+
+    def log(msg):
+        print(msg, file=sys.stderr, flush=True)
+
+    try:
+        result = validate(Kubectl(namespace, args.context), Prometheus(args.prometheus), index, args.patches,
+                          args.window, gates, loadgen=args.loadgenerator, log=log)
+    except (KubectlError, PrometheusError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _write_json(args.out, result)
+    for g in result["gates"]:
+        print(f"{'PASS' if g['passed'] else 'FAIL'}  {g['gate']:<10}  {g['detail']}")
+    print(f"\n{'passed' if result['passed'] else 'FAILED'}; wrote {args.out}")
+    return 0 if result["passed"] else 1
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="rightsize", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -144,6 +170,22 @@ def build_parser():
                     help="skip recommendations below this confidence (default low)")
     pt.add_argument("-q", "--quiet", action="store_true", help="do not print the diff")
     pt.set_defaults(func=cmd_patch)
+
+    v = sub.add_parser("validate", help="apply patches, replay load and check OOM/throttling/error gates")
+    v.add_argument("--patches", default="out/patches", help="directory written by patch")
+    v.add_argument("--namespace", help="namespace to patch (default: the one in the patches)")
+    v.add_argument("--context", help="kubectl context (default: current)")
+    v.add_argument("--prometheus", default="http://127.0.0.1:29090", help="Prometheus base URL")
+    v.add_argument("--window", type=parse_duration, default=parse_duration("5m"),
+                   help="length of the baseline and replay load windows (default 5m)")
+    v.add_argument("--loadgenerator", default="loadgenerator", help="load generator deployment")
+    v.add_argument("--max-throttle", type=float, default=Gates.max_throttle,
+                   help="highest share of throttled CFS periods allowed (default 0.25)")
+    v.add_argument("--max-error-increase", type=float, default=Gates.max_error_increase,
+                   help="largest allowed rise in error rate, absolute (default 0.01)")
+    v.add_argument("--min-requests", type=int, default=Gates.min_requests)
+    v.add_argument("--out", default="out/validation.json", help="results file")
+    v.set_defaults(func=cmd_validate)
     return p
 
 
