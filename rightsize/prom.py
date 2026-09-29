@@ -1,4 +1,4 @@
-"""Minimal Prometheus HTTP API client (query_range only)."""
+"""Minimal Prometheus HTTP API client (query and query_range)."""
 
 import json
 import urllib.parse
@@ -19,11 +19,21 @@ class Prometheus:
 
         Each element is ``{"metric": {...}, "values": [[ts, "value"], ...]}``.
         """
-        params = urllib.parse.urlencode(
-            {"query": query, "start": f"{start:.3f}", "end": f"{end:.3f}", "step": f"{float(step):g}"}
-        )
+        return self._post("query_range", {
+            "query": query, "start": f"{start:.3f}", "end": f"{end:.3f}", "step": f"{float(step):g}",
+        })
+
+    def query(self, query, at=None):
+        """Instant query; elements are ``{"metric": {...}, "value": [ts, "value"]}``."""
+        params = {"query": query}
+        if at is not None:
+            params["time"] = f"{at:.3f}"
+        return self._post("query", params)
+
+    def _post(self, endpoint, params):
+        params = urllib.parse.urlencode(params)
         req = urllib.request.Request(
-            f"{self.base_url}/api/v1/query_range",
+            f"{self.base_url}/api/v1/{endpoint}",
             data=params.encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
