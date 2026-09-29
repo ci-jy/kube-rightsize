@@ -23,6 +23,33 @@ Used by `record`, and by `recommend` when it queries Prometheus directly.
 - `--cpu-percentile` (default 95), `--memory-percentile` (default 99), `--memory-headroom` (default 0.10).
 - `-q`, `--quiet`: skip the summary table.
 
+## patch
+
+Reads a recommendations file and writes one strategic-merge patch per workload, touching only the `resources` of containers whose numbers change.
+
+- `--recommendations PATH`: output of `recommend` (default `out/recommendations.json`).
+- `--out DIR`: where to write the patches (default `out/patches`).
+- `--base DIR`: a kustomization directory to list under `resources:`, so the output is a complete overlay. Without it the kustomization only lists the patches.
+- `--cpu-limits keep|drop`: the recommender suggests no CPU limit, but by default existing CPU limits are kept. A kept limit below the new request is raised to the request. `drop` removes them (`cpu: null` in the patch).
+- `--min-confidence none|low|medium|high`: leave out recommendations below this confidence (default `low`, so everything with data).
+- `-q`: don't print the diff.
+
+The directory gets `<kind>-<name>.yaml` patches, `kustomization.yaml`, `diff.txt` (a unified diff of each container's resources block) and `patches.json`, an index that `validate` reads.
+
+## validate
+
+Applies the patches to a live cluster and compares two load windows of the same length: a baseline on the cluster as it is, then a replay after the patched workloads have rolled out. Each window starts by restarting the load generator, so Locust's request and failure counts cover just that window.
+
+- `--patches DIR` (default `out/patches`), `--namespace NS`, `--context CTX`, `--prometheus URL`.
+- `--window D`: length of each window (default `5m`).
+- `--loadgenerator NAME`: the Locust deployment (default `loadgenerator`).
+- `--max-throttle F`: fail if a container's share of throttled CFS periods goes above this and wasn't above it in the baseline (default 0.25).
+- `--max-error-increase F`: fail if the failure rate rises by more than this, absolute (default 0.01, one percentage point).
+- `--min-requests N`: fewer requests than this in the replay is a failure, because the error rate means nothing (default 50).
+- `--out PATH`: results file (default `out/validation.json`).
+
+It exits 0 when every gate passes, 1 when one fails and 2 when kubectl or Prometheus can't be reached. The gates are `rollout` (every patched workload became available), `oom`, `throttling` and `errors`.
+
 ## Recording format (`rightsize-recording/1`)
 
 Top level: `namespace`, `start`, `end`, `step_seconds`, `rate_window`, `prometheus` and `containers`. Each container entry has `workload`, `container` and a list of `pods`. Each pod holds raw `[timestamp, value]` series for `cpu`, `memory`, `throttled`, `restarts`, `oom_last` and `oom_events`, plus the last seen `requests` and `limits`.
@@ -45,4 +72,8 @@ Top level: `source`, `policy` (the settings used), `summary` and `recommendation
 
 `summary` has container counts, how many were censored, and requested vs recommended CPU (millicores) and memory (MiB) with the freed percentage for each.
 
-Each recommendation has `workload`, `container`, `replicas`, `current`, `recommended`, `observed`, `flags`, `confidence` and `reasons`. `observed` holds coverage in seconds, sample counts, CPU P95, memory P99 and max, P95 throttling, restarts and OOM kills.
+Each recommendation has `workload`, `kind` (guessed from the pod names), `container`, `replicas`, `current`, `recommended`, `observed`, `flags`, `confidence` and `reasons`. `observed` holds coverage in seconds, sample counts, CPU P95, memory P99 and max, P95 throttling, restarts and OOM kills.
+
+## Validation format (`rightsize-validation/1`)
+
+Top level: `namespace`, `window_seconds`, `settings` (the gate thresholds), `patched` (the new resources per workload), `passed`, `gates`, and the two windows `baseline` and `replay`. Each window has its `start` and `end`, Locust's `requests` and `failures`, `error_rate`, `restarts` (restarts and OOM kills per workload/container during the window) and `throttling` (throttled share of CFS periods per workload/container, only for containers with a CPU limit).

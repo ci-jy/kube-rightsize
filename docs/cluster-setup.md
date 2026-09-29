@@ -20,6 +20,22 @@ It takes around 6 minutes.
 
 The committed recording used `WARMUP=120 DURATION=30m`.
 
+## validate.sh
+
+`scripts/validate.sh` is the end-to-end check. It recommends from the committed recording, writes the patches, renders them as a Kustomize overlay over the live Deployments (so a patch that doesn't merge fails before anything is applied), port-forwards Prometheus and runs `rightsize validate`.
+
+If the cluster doesn't exist it runs `up.sh --squeeze` first and deletes the cluster again on exit. A cluster that was already there is left running, patched.
+
+- `WINDOW`: length of the baseline and replay windows (default `5m`).
+- `RECORDING` (default `recordings/boutique-30m.json`), `OUT` (default `out/validation.json`), `PORT` for the port-forward (default 29091), `CLUSTER`, `NODE_MEMORY` (default `3g` here).
+- `KEEP_CLUSTER=1`: keep a cluster the script created.
+
+On a fresh machine it takes about 20 minutes: around 6 for the cluster, two 5-minute windows and the rollouts in between.
+
+## dockerd.sh
+
+`eval "$(scripts/dockerd.sh start)"` starts a private Docker daemon with its data under `$TMPDIR` and exports `DOCKER_HOST`; `scripts/dockerd.sh stop` stops it. It needs sudo. `validate.sh` uses it on its own when `docker info` fails. It runs without the default bridge and with its own address pool so it can sit next to a system Docker, and uses `crun` if it's installed (see below).
+
 ## down.sh
 
 Deletes the cluster.
@@ -28,4 +44,4 @@ Deletes the cluster.
 
 My machine is a sandboxed VM without `/dev/kmsg` and with a read-only `/proc/sys`, and the kubelet refuses to start there. `scripts/kind-config.yaml` mounts `/dev/null` over `/dev/kmsg` and turns on the `KubeletInUserNamespace` feature gate so it can skip those steps. OOM kills are still reported through container status. On a normal Linux host both settings are harmless.
 
-I also had to run Docker with `crun` instead of `runc`, because runc failed on a sysctl permission check on that host.
+I also had to run Docker with `crun` instead of `runc`, because runc failed on a sysctl permission check on that host. `scripts/dockerd.sh` does that for its private daemon.
