@@ -1,0 +1,267 @@
+{
+ "format": "rightsize-validation/1",
+ "namespace": "boutique",
+ "window_seconds": 300.0,
+ "settings": {
+  "max_throttle": 0.25,
+  "max_error_increase": 0.01,
+  "min_requests": 50
+ },
+ "patched": [
+  {
+   "workload": "adservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "15m",
+      "memory": "160Mi"
+     },
+     "limits": {
+      "cpu": "300m",
+      "memory": "200Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "cartservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "56Mi"
+     },
+     "limits": {
+      "cpu": "300m",
+      "memory": "72Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "checkoutservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "32Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "40Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "currencyservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "15m",
+      "memory": "44Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "56Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "emailservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "48Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "60Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "frontend",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "20m",
+      "memory": "32Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "40Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "loadgenerator",
+   "containers": {
+    "main": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "52Mi"
+     },
+     "limits": {
+      "cpu": "500m",
+      "memory": "68Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "paymentservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "32Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "40Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "productcatalogservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "32Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "40Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "recommendationservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "140Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "176Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "redis-cart",
+   "containers": {
+    "redis": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "32Mi"
+     },
+     "limits": {
+      "cpu": "125m",
+      "memory": "40Mi"
+     }
+    }
+   }
+  },
+  {
+   "workload": "shippingservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "10m",
+      "memory": "32Mi"
+     },
+     "limits": {
+      "cpu": "200m",
+      "memory": "40Mi"
+     }
+    }
+   }
+  }
+ ],
+ "passed": true,
+ "gates": [
+  {
+   "gate": "rollout",
+   "passed": true,
+   "detail": "every patched workload rolled out"
+  },
+  {
+   "gate": "oom",
+   "passed": true,
+   "detail": "no container was OOM-killed during the replay",
+   "offenders": []
+  },
+  {
+   "gate": "throttling",
+   "passed": true,
+   "detail": "no container rose above 25% throttled CFS periods",
+   "offenders": []
+  },
+  {
+   "gate": "errors",
+   "passed": true,
+   "detail": "error rate 0.00% -> 0.00% (allowed rise 1.00%)",
+   "baseline": 0.0,
+   "replay": 0.0
+  }
+ ],
+ "baseline": {
+  "start": 1791670581.7,
+  "end": 1791670881.7,
+  "requests": 679,
+  "failures": 0,
+  "restarts": {
+   "recommendationservice/server": {
+    "restarts": 4,
+    "oom_kills": 4
+   }
+  },
+  "throttling": {
+   "emailservice/server": 0.0,
+   "checkoutservice/server": 0.0,
+   "productcatalogservice/server": 0.0,
+   "paymentservice/server": 0.0,
+   "cartservice/server": 0.0032,
+   "frontend/server": 0.003,
+   "redis-cart/redis": 0.0,
+   "currencyservice/server": 0.0302,
+   "adservice/server": 0.005,
+   "shippingservice/server": 0.0,
+   "loadgenerator/main": 0.0
+  },
+  "error_rate": 0.0
+ },
+ "replay": {
+  "start": 1791670941.1,
+  "end": 1791671241.1,
+  "requests": 638,
+  "failures": 0,
+  "restarts": {},
+  "throttling": {
+   "redis-cart/redis": 0.0,
+   "currencyservice/server": 0.0318,
+   "productcatalogservice/server": 0.0,
+   "adservice/server": 0.0022,
+   "emailservice/server": 0.0,
+   "shippingservice/server": 0.0,
+   "cartservice/server": 0.0147,
+   "recommendationservice/server": 0.0,
+   "paymentservice/server": 0.0,
+   "checkoutservice/server": 0.0,
+   "frontend/server": 0.0051,
+   "loadgenerator/main": 0.0
+  },
+  "error_rate": 0.0
+ }
+}
