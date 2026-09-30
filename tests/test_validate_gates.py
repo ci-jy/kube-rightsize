@@ -161,3 +161,16 @@ def test_measure_restarts_load_and_collects_one_window():
     assert w["restarts"] == {"rec/server": {"restarts": 1, "oom_kills": 1}}
     assert w["throttling"] == {"rec/server": 0.02}
     json.dumps(w)  # goes straight into the results file
+
+
+def test_committed_boutique_run_re_evaluates_to_the_same_verdict():
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "results", "boutique-validation.json")
+    with open(path) as fh:
+        run = json.load(fh)
+    again = evaluate(run["baseline"], run["replay"], Gates(**run["settings"]))
+    assert again["passed"] and run["passed"]
+    assert [g["detail"] for g in again["gates"]] == [g["detail"] for g in run["gates"][1:]]
+    # The squeezed service was OOM-killed before patching and not after.
+    assert run["baseline"]["restarts"]["recommendationservice/server"]["oom_kills"] > 0
+    assert run["replay"]["restarts"] == {}
