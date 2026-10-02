@@ -1,6 +1,6 @@
 # kube-rightsize
 
-`rightsize` is a small Python CLI that reads real container usage from Prometheus and suggests CPU and memory requests, plus a memory limit, for every container in a namespace. Each number comes with a written reason. On shared clusters requests tend to get copied from the service next door and then doubled after the first OOM kill. I wanted them based on measurements, without being fooled by containers that were already starving.
+`rightsize` is a small Python CLI that reads how much CPU and memory each container in a namespace really used, from Prometheus, and suggests requests and a memory limit with a written reason for every number. On shared clusters requests tend to get copied from the service next door and then doubled after the first OOM kill. I wanted them based on measurements, without being fooled by containers that were already starving.
 
 ## Running it
 
@@ -14,7 +14,7 @@ python3 -m rightsize recommend --from-recording recordings/boutique-30m.json --o
 python3 -m rightsize patch    # one patch per Deployment in out/patches/, plus diff.txt
 ```
 
-`recordings/boutique-30m.json` is 30 minutes of Google's Online Boutique demo on a local kind cluster with its load generator running. To record your own or test the patches under load you also need Docker, kind, kubectl and Helm 3:
+`recordings/boutique-30m.json` is 30 minutes of Google's Online Boutique demo on a local kind cluster with its load generator running. Recording your own, or testing the patches under load, also needs Docker, kind, kubectl and Helm 3:
 
 ```sh
 scripts/up.sh --squeeze                                            # kind + Prometheus + Online Boutique
@@ -23,7 +23,7 @@ scripts/validate.sh                                                # applies the
 scripts/down.sh
 ```
 
-`validate.sh` takes about 20 minutes and builds the cluster itself if needed. `recommend` can also query a Prometheus directly:
+`validate.sh` takes about 20 minutes and builds the cluster itself if there isn't one. You can also skip the recording and point `recommend` at a Prometheus:
 
 ```sh
 kubectl -n monitoring port-forward svc/prometheus-server 29090:80 &
@@ -35,9 +35,9 @@ Cluster setup and the workarounds my VM needed are in [docs/cluster-setup.md](do
 
 ## What it found on Online Boutique
 
-Across the 12 containers, requested CPU drops from 1570m to 140m and memory from 1180Mi to 692Mi. Per-container numbers are in [docs/boutique-results.md](docs/boutique-results.md).
+Across the 12 containers, requested CPU drops from 1570m to 140m and memory from 1180Mi to 692Mi. The per-container numbers are in [docs/boutique-results.md](docs/boutique-results.md).
 
-The row I care about is `recommendationservice`. `up.sh --squeeze` gives it a 40Mi memory limit, a bit under what it needs, so the recording has real OOM kills in it. Its P99 of 41.2Mi is just the limit plus noise, and a plain "P99 plus 10%" rule would have kept it crash-looping. Instead it gets flagged and raised:
+The row I care about is `recommendationservice`. `up.sh --squeeze` gives it a 40Mi memory limit, a bit under what it needs, so the recording has real OOM kills in it. Its P99 of 41.2Mi is just the limit plus noise. A plain "P99 plus 10%" rule would have kept it crash-looping. Instead it gets flagged and raised:
 
 ```json
 "reasons": [
@@ -48,13 +48,13 @@ The row I care about is `recommendationservice`. `up.sh --squeeze` gives it a 40
 ]
 ```
 
-With all 12 patches applied, a 5-minute replay had no failed requests and no OOM kills. The unpatched baseline had 4 OOM kills, and, which surprised me, no failed requests either. The frontend just renders the page without recommendations when that call fails, so only the OOM gate noticed. I also tried a deliberately undersized patch to make sure the gates can fail. They did. Both runs are in [docs/validation.md](docs/validation.md).
+With all 12 patches applied, a 5-minute replay had no failed requests and no OOM kills. The unpatched baseline had 4 OOM kills and, which surprised me, no failed requests either. The frontend seems to just render the page without recommendations when that call fails, so only the OOM gate noticed. I also tried a deliberately undersized patch to make sure the gates can fail. They did. Both runs are in [docs/validation.md](docs/validation.md).
 
 ## How it works
 
 `rightsize record` runs range queries against the Prometheus HTTP API for one namespace and saves the raw per-pod series (CPU, memory, throttling, restarts, OOM reasons, current requests and limits) as JSON. Everything after that can be recomputed offline, which is how the tests work.
 
-`rightsize recommend` pools the replicas of each container and applies a fairly plain rule: P95 of CPU, P99 of memory plus headroom, a small floor, a memory limit a bit above the request, no CPU limit. The hard part was censored data. If a container was OOM-killed or sat at its limit, the percentile you measure is the limit, not the demand, and sizing from it shrinks exactly the service that is starving. Those get raised the way the Vertical Pod Autoscaler reacts to an OOM kill. My first version also mistook startup CPU bursts for throttling, so samples right after a container starts are now skipped. The rules are in [docs/rules.md](docs/rules.md).
+`rightsize recommend` pools the replicas of each container and applies a fairly plain rule: P95 of CPU, P99 of memory plus headroom, a small floor, a memory limit a bit above the request, and no CPU limit. The hard part was censored data. If a container was OOM-killed or sat at its limit, the percentile you measure is the limit, not the demand, and sizing from it shrinks exactly the service that is starving. Those containers get raised the way the Vertical Pod Autoscaler reacts to an OOM kill instead. Restarts caused a second problem: the CPU burst right after a container starts looks like throttling, so those samples are skipped. The full rules are in [docs/rules.md](docs/rules.md).
 
 `rightsize patch` writes strategic-merge patches that only touch `resources`. Existing CPU limits stay unless you pass `--cpu-limits drop`, since removing a limit is a different decision from resizing a request. `rightsize validate` compares a baseline load window with a replay after the rollout and checks four gates: rollout, OOM kills, throttling and error rate.
 
@@ -63,6 +63,6 @@ With all 12 patches applied, a 5-minute replay had no failed requests and no OOM
 - A 5-minute replay at light load is a smoke test, not proof. Memory that creeps up over hours won't show up, and 10 simulated users is nothing like a real daily peak.
 - OOM detection relies on kube-state-metrics' `last_terminated_reason`. The cAdvisor fallback needs `/dev/kmsg`, which my VM didn't have, so it always read zero.
 - Workloads are found by stripping the hash off pod names, not by owner references, so a bare pod whose name ends in something like `-12345` gets grouped wrongly.
-- Patches are Kustomize only. Online Boutique also ships a Helm chart, and writing a values file would be a natural next step.
+- Patches are Kustomize only. Online Boutique also ships a Helm chart, so writing a values file would be a natural next step.
 
 Project period: 2026-08-01 to 2026-10-02.
