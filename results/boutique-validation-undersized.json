@@ -1,0 +1,105 @@
+{
+ "format": "rightsize-validation/1",
+ "namespace": "boutique",
+ "window_seconds": 180.0,
+ "settings": {
+  "max_throttle": 0.25,
+  "max_error_increase": 0.01,
+  "min_requests": 50
+ },
+ "patched": [
+  {
+   "workload": "adservice",
+   "containers": {
+    "server": {
+     "requests": {
+      "cpu": "15m",
+      "memory": "64Mi"
+     },
+     "limits": {
+      "cpu": "300m",
+      "memory": "80Mi"
+     }
+    }
+   }
+  }
+ ],
+ "passed": false,
+ "gates": [
+  {
+   "gate": "rollout",
+   "passed": false,
+   "detail": "adservice: kubectl --context kind-rightsize -n boutique rollout status deployment/adservice --timeout=300s: error: timed out waiting for the condition"
+  },
+  {
+   "gate": "oom",
+   "passed": false,
+   "detail": "OOM-killed during replay: adservice/server x1",
+   "offenders": [
+    "adservice/server"
+   ]
+  },
+  {
+   "gate": "throttling",
+   "passed": true,
+   "detail": "no container rose above 25% throttled CFS periods",
+   "offenders": []
+  },
+  {
+   "gate": "errors",
+   "passed": true,
+   "detail": "error rate 0.00% -> 0.00% (allowed rise 1.00%)",
+   "baseline": 0.0,
+   "replay": 0.0
+  }
+ ],
+ "baseline": {
+  "start": 1791671263.1,
+  "end": 1791671443.1,
+  "requests": 404,
+  "failures": 0,
+  "restarts": {},
+  "throttling": {
+   "redis-cart/redis": 0.0,
+   "currencyservice/server": 0.0072,
+   "productcatalogservice/server": 0.0,
+   "adservice/server": 0.0274,
+   "emailservice/server": 0.0,
+   "shippingservice/server": 0.0,
+   "cartservice/server": 0.0,
+   "recommendationservice/server": 0.0,
+   "paymentservice/server": 0.0,
+   "checkoutservice/server": 0.0,
+   "frontend/server": 0.0082,
+   "loadgenerator/main": 0.0
+  },
+  "error_rate": 0.0
+ },
+ "replay": {
+  "start": 1791671746.8,
+  "end": 1791671926.8,
+  "requests": 385,
+  "failures": 0,
+  "restarts": {
+   "adservice/server": {
+    "restarts": 1,
+    "oom_kills": 1
+   }
+  },
+  "throttling": {
+   "redis-cart/redis": 0.0,
+   "currencyservice/server": 0.0017,
+   "productcatalogservice/server": 0.0,
+   "adservice/server": 0.0057,
+   "emailservice/server": 0.0,
+   "shippingservice/server": 0.0,
+   "cartservice/server": 0.0,
+   "recommendationservice/server": 0.0,
+   "paymentservice/server": 0.0,
+   "checkoutservice/server": 0.0,
+   "frontend/server": 0.0037,
+   "loadgenerator/main": 0.0
+  },
+  "error_rate": 0.0
+ }
+}
