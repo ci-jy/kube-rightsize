@@ -27,7 +27,8 @@ The committed recording used `WARMUP=120 DURATION=30m`.
 If the cluster doesn't exist it runs `up.sh --squeeze` first and deletes the cluster again on exit. A cluster that was already there is left running, patched.
 
 - `WINDOW`: length of the baseline and replay windows (default `5m`).
-- `RECORDING` (default `recordings/boutique-30m.json`), `OUT` (default `out/validation.json`), `PORT` for the port-forward (default 29091), `CLUSTER`, `NODE_MEMORY` (default `3g` here).
+- `RECORDING` (default `recordings/boutique-30m.json`), `OUT` (default `out/validate.json`), `PORT` for the port-forward (default 29091), `CLUSTER`, `NODE_MEMORY` (default `3g` here).
+- `RECORD=10m`: record a fresh window from the cluster (after `WARMUP` seconds, default 120) and recommend from that instead of `RECORDING`. The recording is saved as `out/recording.json`. This is what CI does.
 - `KEEP_CLUSTER=1`: keep a cluster the script created.
 
 On a fresh machine it takes about 20 minutes: around 6 for the cluster, two 5-minute windows and the rollouts in between.

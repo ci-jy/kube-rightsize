@@ -46,9 +46,20 @@ Applies the patches to a live cluster and compares two load windows of the same 
 - `--max-throttle F`: fail if a container's share of throttled CFS periods goes above this and wasn't above it in the baseline (default 0.25).
 - `--max-error-increase F`: fail if the failure rate rises by more than this, absolute (default 0.01, one percentage point).
 - `--min-requests N`: fewer requests than this in the replay is a failure, because the error rate means nothing (default 50).
-- `--out PATH`: results file (default `out/validation.json`).
+- `--recommendations PATH`: the recommendations the patches were made from (default `out/recommendations.json`). If the file exists it is copied into the results, so `report` needs nothing else.
+- `--out PATH`: results file (default `out/validate.json`).
 
 It exits 0 when every gate passes, 1 when one fails and 2 when kubectl or Prometheus can't be reached. The gates are `rollout` (every patched workload became available), `oom`, `throttling` and `errors`.
+
+## report
+
+Writes a single static HTML page (inline CSS, no JavaScript, nothing time-dependent) from a validation run: requested, used and recommended CPU and memory per container, the total capacity freed, the gates, and the two load windows side by side.
+
+- `--run PATH`: results from `validate` (default `out/validate.json`).
+- `--recommendations PATH`: only needed for results that don't carry their own copy, such as the 0.2.0 runs in `results/`.
+- `--out PATH`: the page (default `docs/index.html`).
+
+"Used" means CPU P95 and memory P99 from the recording the recommendations came from. The "in replay" columns are the busiest replica's average CPU and peak working set during the patched replay window.
 
 ## Recording format (`rightsize-recording/1`)
 
@@ -76,4 +87,4 @@ Each recommendation has `workload`, `kind` (guessed from the pod names), `contai
 
 ## Validation format (`rightsize-validation/1`)
 
-Top level: `namespace`, `window_seconds`, `settings` (the gate thresholds), `patched` (the new resources per workload), `passed`, `gates`, and the two windows `baseline` and `replay`. Each window has its `start` and `end`, Locust's `requests` and `failures`, `error_rate`, `restarts` (restarts and OOM kills per workload/container during the window) and `throttling` (throttled share of CFS periods per workload/container, only for containers with a CPU limit).
+Top level: `namespace`, `window_seconds`, `settings` (the gate thresholds), `patched` (the new resources per workload), `passed`, `gates`, and the two windows `baseline` and `replay`. Each window has its `start` and `end`, Locust's `requests` and `failures`, `error_rate`, `restarts` (restarts and OOM kills per workload/container during the window), `throttling` (throttled share of CFS periods per workload/container, only for containers with a CPU limit) and `usage` (the busiest replica's average CPU in millicores and peak working set in MiB over the window). Runs from 0.3.0 on also hold a copy of the `recommendations`.
