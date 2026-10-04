@@ -81,6 +81,11 @@ def test_failed_gate_is_shown_as_failed():
     assert "1 / 2 passed" in page and "svc/server x1" in page
 
 
+def test_load_windows_count_restarts_and_oom_kills():
+    page = render(run(), {"recommendations": [rec()]})
+    assert re.search(r"Container restarts</td><td class=\"num\">2</td>\s*<td class=\"num\">0</td>", page)
+
+
 def test_names_and_reasons_are_escaped():
     page = render(run(), {"recommendations": [rec("<script>x</script>")]})
     assert "<script>" not in page and "&lt;script&gt;" in page

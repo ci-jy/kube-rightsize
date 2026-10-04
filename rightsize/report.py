@@ -129,6 +129,7 @@ def _window_stats(w):
     return {
         "requests": w.get("requests"),
         "failures": w.get("failures"),
+        "restarts": sum(v.get("restarts", 0) for v in restarts.values()),
         "oom": sum(v.get("oom_kills", 0) for v in restarts.values()),
         "throttle": f"{worst[1]:.1%} ({worst[0]})" if worst else "-",
     }
@@ -198,7 +199,7 @@ def render(run, recommendations=None):
     b, r = _window_stats(run.get("baseline") or {}), _window_stats(run.get("replay") or {})
     h.append("<h2>Load windows</h2><table><tr><th></th><th>Before patching</th><th>After patching</th></tr>")
     for label, key in (("Requests sent", "requests"), ("Failed requests", "failures"),
-                       ("OOM kills", "oom"), ("Worst throttled share of CFS periods", "throttle")):
+                       ("Container restarts", "restarts"), ("OOM kills", "oom"), ("Worst throttled share of CFS periods", "throttle")):
         h.append(f'<tr><td>{label}</td><td class="num">{escape(str(b[key]))}</td>'
                  f'<td class="num">{escape(str(r[key]))}</td></tr>')
     h.append("</table>")
