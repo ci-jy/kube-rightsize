@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[test]'
+      - run: python -m pytest
+      - name: Recommend from the committed recording
+        run: python -m rightsize recommend --from-recording recordings/boutique-30m.json --out out/recommendations.json
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the workflows
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CLI image
+        run: docker build -t kube-rightsize .
+      - name: Smoke-test it on the committed recording
+        run: |
+          docker run --rm -v "$PWD/recordings:/data:ro" kube-rightsize \
+            recommend --from-recording /data/boutique-30m.json --out - > recommendations.json
+          python3 -c "import json; s = json.load(open('recommendations.json'))['summary']; print(s); assert s['containers'] == 12"
