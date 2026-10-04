@@ -123,6 +123,33 @@ def throttle_query(namespace, window_s):
     )
 
 
+def usage_queries(namespace, window_s):
+    """Average CPU (cores) and peak working-set memory (bytes) per pod and container over a window."""
+    sel = f'namespace="{namespace}",container!="",container!="POD"'
+    w = f"{int(window_s)}s"
+    by = "by (pod, container)"
+    return {
+        "cpu": f"sum {by} (rate(container_cpu_usage_seconds_total{{{sel}}}[{w}]))",
+        "memory": f"max {by} (max_over_time(container_memory_working_set_bytes{{{sel}}}[{w}]))",
+    }
+
+
+def usage(cpu_result, memory_result):
+    """Busiest replica's average CPU (millicores) and peak memory (MiB) per workload/container."""
+    out = {}
+    for field, result, scale in (("cpu_millicores", cpu_result, 1000.0), ("memory_mib", memory_result, 1 / 2**20)):
+        for series in result:
+            m = series["metric"]
+            if "pod" not in m or "container" not in m:
+                continue
+            v = float(series["value"][1])
+            if v != v:
+                continue
+            entry = out.setdefault(f"{workload_of(m['pod'])}/{m['container']}", {})
+            entry[field] = round(max(entry.get(field, 0.0), v * scale), 2)
+    return out
+
+
 def throttling(result):
     """Highest throttled share per workload/container from an instant query result."""
     out = {}
@@ -214,6 +241,8 @@ def measure(kubectl, prom, window_s, loadgen="loadgenerator", container="main", 
         "restarts": restarts_between(before, after, start),
         "throttling": throttling(prom.query(throttle_query(kubectl.namespace, end - start), end)),
     }
+    q = usage_queries(kubectl.namespace, end - start)
+    result["usage"] = usage(prom.query(q["cpu"], end), prom.query(q["memory"], end))
     result["error_rate"] = error_rate(result)
     return result
 

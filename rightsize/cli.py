@@ -126,6 +126,10 @@ def cmd_validate(args):
     except (KubectlError, PrometheusError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if args.recommendations and os.path.exists(args.recommendations):
+        # Kept with the run so the report needs nothing else to show requested vs used vs recommended.
+        with open(args.recommendations) as fh:
+            result["recommendations"] = json.load(fh)
     _write_json(args.out, result)
     for g in result["gates"]:
         print(f"{'PASS' if g['passed'] else 'FAIL'}  {g['gate']:<10}  {g['detail']}")
@@ -184,7 +188,9 @@ def build_parser():
     v.add_argument("--max-error-increase", type=float, default=Gates.max_error_increase,
                    help="largest allowed rise in error rate, absolute (default 0.01)")
     v.add_argument("--min-requests", type=int, default=Gates.min_requests)
-    v.add_argument("--out", default="out/validation.json", help="results file")
+    v.add_argument("--recommendations", default="out/recommendations.json",
+                   help="recommendations the patches came from, copied into the results if present")
+    v.add_argument("--out", default="out/validate.json", help="results file")
     v.set_defaults(func=cmd_validate)
     return p
 
