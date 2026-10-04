@@ -1,4 +1,4 @@
-"""Command line: ``python -m rightsize record|recommend|patch|validate``."""
+"""Command line: ``python -m rightsize record|recommend|patch|validate|report``."""
 
 import argparse
 import json
@@ -9,6 +9,7 @@ import sys
 from .patch import build_patches, summary_line, write_patches
 from .prom import Prometheus, PrometheusError
 from .recommend import Policy, recommend
+from .report import render
 from .record import record
 from .validate import Gates, Kubectl, KubectlError, validate
 
@@ -137,6 +138,25 @@ def cmd_validate(args):
     return 0 if result["passed"] else 1
 
 
+def cmd_report(args):
+    with open(args.run) as fh:
+        run = json.load(fh)
+    recs = None
+    if args.recommendations:
+        with open(args.recommendations) as fh:
+            recs = json.load(fh)
+    try:
+        page = render(run, recs)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    with open(args.out, "w") as fh:
+        fh.write(page)
+    print(f"wrote {args.out} ({'passed' if run.get('passed') else 'failed'} run)", file=sys.stderr)
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="rightsize", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -192,6 +212,13 @@ def build_parser():
                    help="recommendations the patches came from, copied into the results if present")
     v.add_argument("--out", default="out/validate.json", help="results file")
     v.set_defaults(func=cmd_validate)
+
+    rp = sub.add_parser("report", help="static HTML report of a validation run")
+    rp.add_argument("--run", default="out/validate.json", help="results file written by validate")
+    rp.add_argument("--recommendations",
+                    help="recommendations file, for results that do not carry their own copy")
+    rp.add_argument("--out", default="docs/index.html", help="HTML file to write (default docs/index.html)")
+    rp.set_defaults(func=cmd_report)
     return p
 
 
