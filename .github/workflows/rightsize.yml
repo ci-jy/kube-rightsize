@@ -1,0 +1,83 @@
+# On a pull request that touches the cluster manifests or the sizing code, build
+# the kind cluster, record live usage, recommend, patch, replay load and gate on
+# OOM kills, throttling and errors. The HTML report and the run are uploaded as
+# an artifact, and the gate table goes into the job summary.
+name: rightsize
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "rightsize/**"
+      - "recordings/**"
+      - ".github/workflows/rightsize.yml"
+  workflow_dispatch:
+    inputs:
+      record:
+        description: "How long to record before recommending (empty: use the committed recording)"
+        default: "10m"
+      window:
+        description: "Length of each validation load window"
+        default: "5m"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rightsize-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RECORD: ${{ github.event_name == 'workflow_dispatch' && inputs.record || '10m' }}
+      WINDOW: ${{ github.event_name == 'workflow_dispatch' && inputs.window || '5m' }}
+      NODE_MEMORY: 6g
+      KEEP_CLUSTER: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - uses: azure/setup-helm@v4
+      - name: Bring up kind, record, recommend, patch and validate
+        id: validate
+        run: scripts/validate.sh
+      - name: Render the report
+        if: always() && hashFiles('out/validate.json') != ''
+        run: |
+          python -m rightsize report --run out/validate.json --out out/report/index.html
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          run = json.load(open("out/validate.json"))
+          s = run["recommendations"]["summary"]
+          print(f"### rightsize: {'passed' if run['passed'] else 'FAILED'}\n")
+          print(f"CPU requests {s['cpu_requested_millicores']}m -> {s['cpu_recommended_millicores']}m, "
+                f"memory {s['memory_requested_mib']}Mi -> {s['memory_recommended_mib']}Mi.\n")
+          print("| gate | result | detail |\n|---|---|---|")
+          for g in run["gates"]:
+              print(f"| {g['gate']} | {'pass' if g['passed'] else 'fail'} | {g['detail']} |")
+          PY
+      - name: Dump cluster state on failure
+        if: failure()
+        run: kubectl --context kind-rightsize -n boutique get pods -o wide || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rightsize-run
+          path: |
+            out/validate.json
+            out/recommendations.json
+            out/recording.json
+            out/patches/
+            out/report/
+          if-no-files-found: ignore
+      - name: Delete the cluster
+        if: always()
+        run: kind delete cluster --name rightsize || true
