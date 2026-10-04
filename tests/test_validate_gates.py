@@ -6,6 +6,7 @@ from hypothesis import strategies as st
 
 from rightsize.validate import (
     Gates, container_states, evaluate, measure, parse_locust, restarts_between, throttle_query, throttling,
+    usage, usage_queries,
 )
 
 LOCUST_LOG = """\
@@ -128,6 +129,18 @@ def test_throttling_keeps_the_worst_replica_and_skips_unlimited_containers():
     assert "[300s]" in throttle_query("boutique", 300)
 
 
+def test_usage_keeps_the_busiest_replica_in_millicores_and_mib():
+    cpu = [
+        {"metric": {"pod": "frontend-6d47d98676-kpxg9", "container": "server"}, "value": [0, "0.004"]},
+        {"metric": {"pod": "frontend-6d47d98676-zzzzz", "container": "server"}, "value": [0, "0.0125"]},
+        {"metric": {"pod": "redis-cart-c8ff86559-sxscx", "container": "redis"}, "value": [0, "NaN"]},
+    ]
+    memory = [{"metric": {"pod": "frontend-6d47d98676-kpxg9", "container": "server"}, "value": [0, str(20 * 2**20)]}]
+    assert usage(cpu, memory) == {"frontend/server": {"cpu_millicores": 12.5, "memory_mib": 20.0}}
+    q = usage_queries("boutique", 300)
+    assert "max_over_time(container_memory_working_set_bytes" in q["memory"] and "[300s]" in q["cpu"]
+
+
 class FakeKubectl:
     namespace = "boutique"
 
@@ -160,6 +173,7 @@ def test_measure_restarts_load_and_collects_one_window():
     assert (w["requests"], w["failures"]) == (1210, 13)
     assert w["restarts"] == {"rec/server": {"restarts": 1, "oom_kills": 1}}
     assert w["throttling"] == {"rec/server": 0.02}
+    assert w["usage"]["rec/server"]["cpu_millicores"] == 20.0
     json.dumps(w)  # goes straight into the results file
 
 
