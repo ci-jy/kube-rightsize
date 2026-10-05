@@ -122,3 +122,16 @@ def test_report_command_fails_cleanly_without_recommendations(tmp_path):
     path = tmp_path / "validate.json"
     path.write_text(json.dumps(run()))
     assert main(["report", "--run", str(path), "--out", str(tmp_path / "x.html")]) == 2
+
+
+def test_docs_page_is_the_report_of_the_committed_ci_style_run():
+    # results/boutique-validate.json is the run docs/index.html was rendered from; it carries its own
+    # recommendations and per-window usage.
+    with open(os.path.join(ROOT, "results", "boutique-validate.json")) as fh:
+        validation = json.load(fh)
+    assert validation["passed"] and validation["replay"]["restarts"] == {}
+    assert set(validation["replay"]["usage"]) == {
+        f"{r['workload']}/{r['container']}" for r in validation["recommendations"]["recommendations"]
+    }
+    with open(os.path.join(ROOT, "docs", "index.html")) as fh:
+        assert fh.read() == render(validation)
