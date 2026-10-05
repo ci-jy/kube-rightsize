@@ -49,6 +49,12 @@ All four gates passed, with 140m of CPU and 692Mi of memory requested instead of
 
 The baseline had no failed requests even though recommendationservice was crash-looping. The frontend seems to render the page without recommendations when that call fails, so the error gate alone wouldn't have caught it.
 
+## The run behind the report
+
+[results/boutique-validate.json](../results/boutique-validate.json) is a later run of the same script from a fresh cluster. It also records each container's average CPU and peak memory per window and carries the recommendations, which is what [index.html](index.html) is rendered from. All four gates passed again: 634 requests before and 638 after, none failed, nothing restarted after patching.
+
+The baseline was different this time. recommendationservice restarted twice and was throttled for 78% of its CFS periods while crash-looping, but none of the restarts were counted as OOM kills. Only the replay is gated, so the verdict is the same, but the before/after table in the report shows 0 OOM kills on both sides.
+
 ## A deliberately bad patch
 
 To check the gates aren't decorative, I gave adservice (a JVM using about 144Mi) an 80Mi limit. From [results/boutique-validation-undersized.json](../results/boutique-validation-undersized.json), 3-minute windows: the new adservice pod was OOM-killed and crash-looped, so `rollout` and `oom` failed and the command exited 1.
