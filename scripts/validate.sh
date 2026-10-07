@@ -7,8 +7,8 @@
 #
 # If the cluster does not exist it is created with `up.sh --squeeze` (the same
 # setup the recording came from) and deleted again at the end. If Docker is not
-# reachable, a private daemon is started under $TMPDIR (scripts/dockerd.sh) and
-# stopped at the end.
+# reachable, or cannot start the kind node, a private daemon is started under
+# $TMPDIR (scripts/dockerd.sh) and stopped at the end.
 #
 # Environment: CLUSTER (rightsize), WINDOW per load window (5m),
 #              RECORDING (recordings/boutique-30m.json), OUT (out/validate.json),
@@ -45,15 +45,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! docker info >/dev/null 2>&1; then
-  echo "==> Docker not reachable; starting a private daemon"
+private_docker() {
   eval "$(scripts/dockerd.sh start)"
   started_docker=1
+}
+
+if ! docker info >/dev/null 2>&1; then
+  echo "==> Docker not reachable; starting a private daemon"
+  private_docker
 fi
 
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   created_cluster=1
-  CLUSTER=$CLUSTER NODE_MEMORY=${NODE_MEMORY:-3g} scripts/up.sh --squeeze
+  up() { CLUSTER=$CLUSTER NODE_MEMORY=${NODE_MEMORY:-3g} scripts/up.sh --squeeze; }
+  # A reachable daemon can still be unable to start the kind node (runc on a
+  # sandboxed host, see docs/cluster-setup.md); try once more on the private one.
+  if ! up; then
+    [[ $started_docker == 0 ]] || exit 1
+    echo "==> cluster failed on this Docker daemon; retrying on a private one"
+    private_docker
+    up
+  fi
 fi
 
 kubectl --context "$ctx" -n monitoring port-forward svc/prometheus-server "$PORT:80" >/dev/null &

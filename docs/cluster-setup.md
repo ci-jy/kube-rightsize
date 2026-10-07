@@ -35,7 +35,7 @@ On a fresh machine it takes about 20 minutes: around 6 for the cluster, two 5-mi
 
 ## dockerd.sh
 
-`eval "$(scripts/dockerd.sh start)"` starts a private Docker daemon with its data under `$TMPDIR` and exports `DOCKER_HOST`; `scripts/dockerd.sh stop` stops it. It needs sudo. `validate.sh` uses it on its own when `docker info` fails. It runs without the default bridge and with its own address pool so it can sit next to a system Docker, and uses `crun` if it's installed (see below).
+`eval "$(scripts/dockerd.sh start)"` starts a private Docker daemon with its data under `$TMPDIR` and exports `DOCKER_HOST`; `scripts/dockerd.sh stop` stops it. It needs sudo. `validate.sh` uses it on its own when `docker info` fails, or when building the cluster on the reachable daemon fails (as it does with runc on my VM). It runs without the default bridge and with its own address pool so it can sit next to a system Docker, and uses `crun` if it's installed (see below).
 
 ## down.sh
 
