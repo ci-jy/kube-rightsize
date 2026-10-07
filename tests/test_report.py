@@ -124,14 +124,22 @@ def test_report_command_fails_cleanly_without_recommendations(tmp_path):
     assert main(["report", "--run", str(path), "--out", str(tmp_path / "x.html")]) == 2
 
 
-def test_docs_page_is_the_report_of_the_committed_ci_style_run():
-    # results/boutique-validate.json is the run docs/index.html was rendered from; it carries its own
-    # recommendations and per-window usage.
+def test_committed_run_renders_from_its_own_recommendations():
+    # results/boutique-validate.json carries its own recommendations and per-window usage.
     with open(os.path.join(ROOT, "results", "boutique-validate.json")) as fh:
         validation = json.load(fh)
     assert validation["passed"] and validation["replay"]["restarts"] == {}
-    assert set(validation["replay"]["usage"]) == {
-        f"{r['workload']}/{r['container']}" for r in validation["recommendations"]["recommendations"]
-    }
+    keys = {f"{r['workload']}/{r['container']}" for r in validation["recommendations"]["recommendations"]}
+    assert set(validation["replay"]["usage"]) == keys
+    page = render(validation)
+    assert "Memory peak in replay" in page and "105.8Mi" in page  # adservice's peak
+
+
+def test_docs_page_is_a_report_of_a_passed_boutique_run():
+    # Re-rendered by `rightsize report` after each validated run, so only its shape is pinned here.
     with open(os.path.join(ROOT, "docs", "index.html")) as fh:
-        assert fh.read() == render(validation)
+        page = fh.read()
+    assert page.startswith("<!doctype html>")
+    assert "Validation <span class=\"pass\">passed</span>" in page
+    for name in ("adservice/server", "recommendationservice/server", "redis-cart/redis"):
+        assert f"<code>{name}</code>" in page

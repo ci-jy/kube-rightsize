@@ -82,7 +82,7 @@ Memory stayed under every new limit. emailservice peaked a little above its requ
 
 `rightsize recommend` pools the replicas of each container and applies a fairly plain rule: P95 of CPU, P99 of memory plus headroom, a small floor, a memory limit a bit above the request, and no CPU limit. The hard part was censored data. If a container was OOM-killed or sat at its limit, the percentile you measure is the limit, not the demand, and sizing from it shrinks exactly the service that is starving. Those containers get raised the way the Vertical Pod Autoscaler reacts to an OOM kill instead. Restarts caused a second problem: the CPU burst right after a container starts looks like throttling, so those samples are skipped. The full rules are in [docs/rules.md](docs/rules.md).
 
-`rightsize report` turns a validation run into a static page with no JavaScript and nothing time-dependent in it, so the same run always gives the same file. A test checks that `docs/index.html` really is the render of the committed run.
+`rightsize report` turns a validation run into a static page with no JavaScript and nothing time-dependent in it, so the same run always gives the same file.
 
 In CI, `.github/workflows/rightsize.yml` runs `validate.sh` with `RECORD=10m`. It brings up kind, records 10 minutes of live usage, recommends from that instead of the committed recording, patches, validates, and uploads the report as an artifact. A second workflow runs the tests, lints the workflows with actionlint and builds the Docker image.
 
